@@ -13,8 +13,10 @@ public class CSVMaxFinder {
 	private static final int	CARRIAGE_RETURN = 13; 
 	private static final int	LINE_FEED = 10;
 	private static final int	DOCUMENT_END = -1;
+	private static final int	BYTE_ORDER_MARK = 0xFEFF;
 	
-	private static int 			veryImportantColumnNumber;
+	private static int 			veryImportantColumnNumber = -1;
+	private static String		veryImportantColumnName;
 	private static String		csvFilePath;
 	private static int 			lastSymbol;
 	
@@ -24,6 +26,54 @@ public class CSVMaxFinder {
 	
 	private static boolean isCellDelimiter(int symbol) {
 		return symbol == CSV_DELIMITER;
+	}
+	
+	private static boolean processLineEnd(int currentSymbol) throws RowIsEmptyException {
+		switch(lastSymbol){
+		case DOCUMENT_END: return false;
+		case LINE_FEED: lastSymbol = currentSymbol; break;
+		case CARRIAGE_RETURN:
+			if((!isDelimiter(currentSymbol)) || (currentSymbol == LINE_FEED))
+				lastSymbol = currentSymbol;					
+			else
+				throw new RowIsEmptyException("Row is empty\n");				
+		}
+		return true;
+	}
+	
+
+	
+	private static void getVeryImportantColumnNumber(InputStreamReader reader)
+			throws IOException, NoDocumentBodyException, RowIsEmptyException, NoTitleFoundException {
+		
+		
+		StringBuilder currentTitle = new StringBuilder();
+		int currentColumnNumber = -1;
+		int currentSymbol;
+		
+		if(reader.read() != BYTE_ORDER_MARK)
+			reader.reset();
+
+		do {
+			currentSymbol = reader.read();
+			if(isDelimiter(currentSymbol))
+			{
+				currentColumnNumber++;
+				if(currentTitle.toString().equals(veryImportantColumnName))
+					veryImportantColumnNumber = currentColumnNumber;
+				else
+					currentTitle.setLength(0);
+			}
+			else
+				currentTitle.append((char)currentSymbol);			
+		} while((!isDelimiter(currentSymbol)) || (isCellDelimiter(currentSymbol)));
+		
+		if(veryImportantColumnNumber == -1)
+			throw new NoTitleFoundException("No column with such name found\n");
+		lastSymbol = currentSymbol;
+		currentSymbol = reader.read();
+		if(!processLineEnd(currentSymbol))
+			throw new NoDocumentBodyException("No data rows found\n");	
 	}
 	
 	private static void moveToVeryImportantCell(InputStreamReader reader) throws IOException {
@@ -37,7 +87,7 @@ public class CSVMaxFinder {
 						if(isCellDelimiter(currentSymbol))
 							delimitersFound++;
 						else
-							throw new CellDoesNotExistException("Cell does not exist");
+							throw new CellDoesNotExistException("Cell does not exist\n");
 				}
 			}
 		}
@@ -48,7 +98,7 @@ public class CSVMaxFinder {
 	
 	private static double getVeryImportantCell(InputStreamReader reader) throws IOException, CellIsEmptyException, RowIsEmptyException {
 		StringBuilder currentCell = new StringBuilder();
-		int currentSymbol = reader.read();
+		int currentSymbol = (!isDelimiter(lastSymbol) && (veryImportantColumnNumber == 0)) ? lastSymbol : reader.read();
 		
 		while(!isDelimiter(currentSymbol))
 		{
@@ -57,7 +107,7 @@ public class CSVMaxFinder {
 		}
 		
 		if(currentCell.length() == 0)
-			throw new CellIsEmptyException("Cell is empty");			
+			throw new CellIsEmptyException("Cell is empty\n");			
 				
 		lastSymbol = currentSymbol;
 		return Double.parseDouble(currentCell.toString());		
@@ -66,38 +116,31 @@ public class CSVMaxFinder {
 	private static boolean moveToNextLine(InputStreamReader reader) throws IOException, RowIsEmptyException {
 		int currentSymbol = reader.read();
 	
-		while((!isDelimiter(lastSymbol)) || (isCellDelimiter(lastSymbol))) {
-			lastSymbol = currentSymbol;
+		while((!isDelimiter(currentSymbol)) || (isCellDelimiter(currentSymbol)))
 			currentSymbol = reader.read();
-		}
 		
-		switch(lastSymbol){
-			case DOCUMENT_END: return false;
-			case LINE_FEED: lastSymbol = currentSymbol; break;
-			case CARRIAGE_RETURN:
-				if((!isDelimiter(currentSymbol)) || (currentSymbol == LINE_FEED))
-					lastSymbol = currentSymbol;					
-				else
-					throw new RowIsEmptyException("Row is empty");				
-		}		
-		return true;
+		lastSymbol = currentSymbol;
+		currentSymbol = reader.read();
+		
+		
+		return processLineEnd(currentSymbol);
 	}
 
 
-	private static double getMaxVeryImportantValue(InputStreamReader reader) throws IOException, CellDoesNotExistException, CellIsEmptyException, RowIsEmptyException {
+	private static double getMaxVeryImportantValue(InputStreamReader reader)
+			throws IOException, CellDoesNotExistException, CellIsEmptyException,
+			RowIsEmptyException, NoDocumentBodyException, NoTitleFoundException {
+		
 		double maxVeryImportantValue = Double.MIN_VALUE;
 		double currentVeryImportantValue;
-		boolean endOfFile = false;
-		while(!endOfFile)
-		{
+		
+		getVeryImportantColumnNumber(reader);
+		do {
 			moveToVeryImportantCell(reader);
-			
 			currentVeryImportantValue = getVeryImportantCell(reader);
 			if(currentVeryImportantValue > maxVeryImportantValue)
-				maxVeryImportantValue = currentVeryImportantValue;
-			
-			endOfFile = !moveToNextLine(reader);
-		}			
+				maxVeryImportantValue = currentVeryImportantValue;			
+		} while(moveToNextLine(reader));			
 		
 		return maxVeryImportantValue;
 	}
@@ -106,8 +149,8 @@ public class CSVMaxFinder {
 		
 		Scanner inputScanner = new Scanner(System.in);
 		
-		System.out.println("Enter column number (0 for the first)");
-		veryImportantColumnNumber = inputScanner.nextInt();
+		System.out.println("Enter column name");
+		veryImportantColumnName = inputScanner.next();
 		
 		System.out.println("Enter file path");
 		csvFilePath = inputScanner.next();
@@ -115,18 +158,15 @@ public class CSVMaxFinder {
 		inputScanner.close();
 		
 		FileInputStream csvFileStream = new FileInputStream(new File(csvFilePath));
-		InputStreamReader csvReader = new InputStreamReader(csvFileStream);
+		InputStreamReader csvReader = new InputStreamReader(csvFileStream, "UTF-8");
 		
-		double maxValue = Double.MIN_VALUE;
 		try {
-			maxValue = getMaxVeryImportantValue(csvReader);
+			double maxValue = getMaxVeryImportantValue(csvReader);
 			System.out.println(maxValue);
 		}
-		catch(CellDoesNotExistException | CellIsEmptyException | RowIsEmptyException e) {
+		catch(CellDoesNotExistException | CellIsEmptyException | RowIsEmptyException | NoDocumentBodyException | NoTitleFoundException e) {
 			System.out.println(e.getMessage());
 		}
-		
-		
 
 	}
 
