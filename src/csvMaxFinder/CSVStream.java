@@ -17,9 +17,6 @@ public class CSVStream extends InputStreamReader {
 	private static final int	DOCUMENT_END = -1;
 	private static final int	BYTE_ORDER_MARK = 0xFEFF;
 	
-	//private int 				veryImportantColumnNumber;
-	//private String				veryImportantColumnName;
-	private String				csvFilePath;
 	private int 				currentSymbol;
 	
 

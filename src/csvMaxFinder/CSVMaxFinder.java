@@ -12,14 +12,16 @@ public class CSVMaxFinder {
 	public static void main(String[] args) throws FileNotFoundException, IOException {
 		
 		Scanner inputScanner = new Scanner(System.in);
-		FileInputStream csvFileStream = new FileInputStream(new File("D:\\input.csv"));
-		CSVStream csvReader = new CSVStream(csvFileStream, "UTF-8");
+		
 		
 		System.out.println("Enter column name");
 		String veryImportantColumnName = inputScanner.next();
 		
-//		System.out.println("Enter file path");
-	//	csvFilePath = inputScanner.next();
+		System.out.println("Enter file path");
+		String csvFilePath = inputScanner.next();
+		
+		FileInputStream csvFileStream = new FileInputStream(new File(csvFilePath));
+		CSVStream csvReader = new CSVStream(csvFileStream, "UTF-8");
 		
 		inputScanner.close();
 		
